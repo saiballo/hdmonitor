@@ -48,7 +48,7 @@ SERVER_SDOWN_LOOP='3'
 
 # directory where to store log files. check r/w permissions for the user
 # directory dove salvare i LOG (senza slash finale). controllare i permessi di scrittura sulla cartella
-LOGS_DIR='/home/saibal/s_shell_scripts/[log]'
+LOGS_DIR='/home/saibal/log'
 
 # log filename
 # nome del file di LOG
@@ -68,7 +68,7 @@ EMAIL_SERVICE='ssmtp'
 
 # email recipient
 # destinatario email
-EMAIL_RECIVER='lorenzo.forti@gmail.com'
+EMAIL_RECIVER='myemail@email.com'
 
 ########################################
 # NOTHING TO EDIT
