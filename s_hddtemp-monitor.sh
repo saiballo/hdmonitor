@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# Hddtemp Monitor
+# Hdtemp Monitor
 #
-# Data: 	15/06/2018 17:17:54
+# Data: 	06/01/2025 17:17:54
 # Autore: 	Lorenzo Saibal Forti <saibal@lorenzone.it>
 #
 # Copyleft:	2010 - Tutti i diritti riservati
@@ -28,7 +28,7 @@
 
 # a space separated list of HD to monitor. (e.g. /dev/sda /dev/sdb etc etc)
 # hard disk da monitorare (separati da spazio)
-HDDS='/dev/sda'
+HDDS="/dev/nvme0 /dev/nvme1"
 
 # your username. needed if you use cron to call the script. can be empty if you don't use cron job.
 # il tuo nome utente (serve per abilitare le notifiche se usate da cron. lascia vuoto se non vuoi usarle)
@@ -36,7 +36,7 @@ USERNAME_XAUTHORITY='saibal'
 
 # temperatura max limit (in celsius)
 # limite temperatura (in gradi centigradi)
-TEMPERATURE_LIMIT='48'
+HD_TEMP_LIMIT='50'
 
 # shutdown the server when max limit reached (y or n)
 # spegnere il server automaticamente (y oppure n)
@@ -44,49 +44,57 @@ SERVER_SDOWN='y'
 
 # number of loop before shutdown the server (how many times cron job call the script)
 # dopo quanti avvisi spegnere il server
-SERVER_SDOWN_LOOP='3'
+SERVER_SDOWN_LOOP='2'
+
+# root path of the script (no final slash)
+# directory padre (no slash finale)
+ROOT_PATH='/home/saibal/s_shell_scripts'
 
 # directory where to store log files. check r/w permissions for the user
 # directory dove salvare i LOG (senza slash finale). controllare i permessi di scrittura sulla cartella
-LOGS_DIR='/home/saibal/log'
+PATH_LOG="$ROOT_PATH/log"
 
 # log filename
 # nome del file di LOG
-LOGS_FILENAME='s_hddtemp-monitor.log'
+LOG_FILENAME='s_hdtemp-monitor.log'
 
 # max size of the log file (in KB)
 # dimensione massima del file di log (in KB)
-LOGS_MAXSIZE='900'
+LOG_MAXSIZE='900'
+
+# path cartella immagini (no slash finale)
+PATH_IMG="$ROOT_PATH/img"
 
 # notification type: 0 = no notification, 1 = video (need libnotify-bin installed), 2 = email, 3 = both video and email
 # tipo di notifica. (0 = nessuna notifica, 1 = video con libnotify-bin installato, 2 = email, 3 = sia video che email)
 NOTIFY_TYPE='3'
 
-# email service for notification type 2 or 3. usually I use "ssmtp". try with "smtp" or another service but I don't guarantee
-# se impostato il tipo di notifica 2 o 3 selezionare il programma da utilizzare (valori possibili: 'sendmail' o 'ssmtp')
-EMAIL_SERVICE='ssmtp'
+# email service for notification type 2 or 3. usually I use "msmtp". try with "smtp" or another service but I don't guarantee
+# se impostato il tipo di notifica 2 o 3 selezionare il programma da utilizzare (valori possibili: 'sendmail' o 'msmtp')
+EMAIL_SERVICE='msmtp'
 
 # email recipient
 # destinatario email
-EMAIL_RECIVER='myemail@email.com'
+EMAIL_RECIVER='lorenzo.forti@gmail.com'
+
+# service used for hdd temp. can be hddtemp, smartctl or nvme
+# programma per il rilevamento della temperatura. può essere hddtemp, smartctl oppure nvme (se sono presenti solo ssd)
+HDSENSOR='smartctl'
 
 ########################################
 # NOTHING TO EDIT
 # NIENTE DA MODIFICARE
 ########################################
 
-# per usare zenity e/o libnotify da cron è necessario esportare la variabile DISPLAY e XAUTHORITY (dalla versione 14.04)
+# per usare libnotify da cron è necessario esportare la variabile DISPLAY e XAUTHORITY (dalla versione 14.04)
 export XAUTHORITY="/home/$USERNAME_XAUTHORITY/.Xauthority"
 export DISPLAY=:0
 
 # path principali del sistema
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin
 
-# programma per il rilevamento della temperatura
-HDDTEMP='hddtemp'
-
-# comando hddtemp
-HDT="/usr/sbin/$HDDTEMP"
+# comando sensor
+HDT="/usr/sbin/$HDSENSOR"
 
 # comando per shutdown pc
 DOWN='/sbin/shutdown'
@@ -97,8 +105,8 @@ TODAY_TIME=$(date +%H:%M)
 MSG_SDOWN_PLUS=''
 COUNT_NOTIFY_ERROR=0
 COUNT_TODAY_ALERT=0
-Z_MSG_TIMEOUT=10
-Z_MSG_TITLE="Hard Disk Alarm"
+DIALOG_TIMEOUT=10
+DIALOG_TITLE="Hard Disk Alarm"
 
 # funzione per inviare email | eliminato il campo From: per problemi con google come proxy. anche il campo To va tolto
 # $1 $EMAIL_SERVICE | $2 $EMAIL_RECIVER | $3 SOGGETTO | $4 $EMAIL_MSG
@@ -112,39 +120,39 @@ send_mail() {
 # FUNZIONI LOG
 #=========================================
 # creo la dir se non esiste
-if [ ! -d  "$LOGS_DIR" ]
+if [ ! -d  "$PATH_LOG" ]
 then
 
-	mkdir "$LOGS_DIR"
+	mkdir "$PATH_LOG"
 fi
 
 # creo il file di log
-if [ ! -f  "$LOGS_DIR/$LOGS_FILENAME" ]
+if [ ! -f  "$PATH_LOG/$LOG_FILENAME" ]
 then
 
-	echo -ne > "$LOGS_DIR/$LOGS_FILENAME"
+	echo -ne > "$PATH_LOG/$LOG_FILENAME"
 fi
 
 # converto i KB in BYTES dopo aver controllato che la VAR non sia vuota
-if [ -n "$LOGS_MAXSIZE" ]
+if [ -n "$LOG_MAXSIZE" ]
 then
 
-	LOGS_MAXBYTES=$(( $LOGS_MAXSIZE*1000 ))
+	LOG_MAXBYTES=$(( $LOG_MAXSIZE*1000 ))
 
 else
 
-	LOGS_MAXBYTES=$(( 1000*1000 ))
+	LOG_MAXBYTES=$(( 1000*1000 ))
 fi
 
 # dimensione del file per vedere quando troncarlo
-LOG_SIZE=$( stat -c %s "$LOGS_DIR/$LOGS_FILENAME")
+LOG_SIZE=$( stat -c %s "$PATH_LOG/$LOG_FILENAME")
 
 # se la misura attuale è più grande di quella massima tronco il file e ricomincio
-if [ "$LOG_SIZE" -gt $LOGS_MAXBYTES ]
+if [ "$LOG_SIZE" -gt $LOG_MAXBYTES ]
 then
 
 	# con il parametro -n non metto una riga vuota nel file
-	echo -ne > "$LOGS_DIR/$LOGS_FILENAME"
+	echo -ne > "$PATH_LOG/$LOG_FILENAME"
 fi
 
 #=========================================
@@ -167,7 +175,7 @@ case "$NOTIFY_TYPE" in
 			(( COUNT_NOTIFY_ERROR++ ))
 
 			MESSG_NOTIFY_ERROR="\"notify-send\": il programma per le notifiche non risulta installato sul sistema"
-			echo "$TODAY_DATE | $TODAY_TIME | $MESSG_NOTIFY_ERROR" >> "$LOGS_DIR/$LOGS_FILENAME"
+			echo "$TODAY_DATE | $TODAY_TIME | $MESSG_NOTIFY_ERROR" >> "$PATH_LOG/$LOG_FILENAME"
 
 		fi
 	;;
@@ -181,7 +189,7 @@ case "$NOTIFY_TYPE" in
 			(( COUNT_NOTIFY_ERROR++ ))
 
 			MESSG_NOTIFY_ERROR="\"$EMAIL_SERVICE\": il programma per l'invio delle email non risulta installato sul sistema"
-			echo "$TODAY_DATE | $TODAY_TIME | $MESSG_NOTIFY_ERROR" >> "$LOGS_DIR/$LOGS_FILENAME"
+			echo "$TODAY_DATE | $TODAY_TIME | $MESSG_NOTIFY_ERROR" >> "$PATH_LOG/$LOG_FILENAME"
 
 		fi
 	;;
@@ -195,7 +203,7 @@ case "$NOTIFY_TYPE" in
 			(( COUNT_NOTIFY_ERROR++ ))
 
 			MESSG_NOTIFY_ERROR="\"$EMAIL_SERVICE\": il programma per l'invio delle email non risulta installato sul sistema"
-			echo "$TODAY_DATE | $TODAY_TIME | $MESSG_NOTIFY_ERROR" >> "$LOGS_DIR/$LOGS_FILENAME"
+			echo "$TODAY_DATE | $TODAY_TIME | $MESSG_NOTIFY_ERROR" >> "$PATH_LOG/$LOG_FILENAME"
 
 		fi
 
@@ -207,7 +215,7 @@ case "$NOTIFY_TYPE" in
 			(( COUNT_NOTIFY_ERROR++ ))
 
 			MESSG_NOTIFY_ERROR="\"notify-send\": il programma per le notifiche non risulta installato sul sistema"
-			echo "$TODAY_DATE | $TODAY_TIME | $MESSG_NOTIFY_ERROR" >> "$LOGS_DIR/$LOGS_FILENAME"
+			echo "$TODAY_DATE | $TODAY_TIME | $MESSG_NOTIFY_ERROR" >> "$PATH_LOG/$LOG_FILENAME"
 
 		fi
 	;;
@@ -216,7 +224,7 @@ case "$NOTIFY_TYPE" in
         COUNT_NOTIFY_ERROR=1
 
         MESSG_NOTIFY_ERROR="Errore impostazioni per il tipo di notifica. Possibili valori: 0, 1, 2 o 3"
-        echo "$TODAY_DATE $TODAY_TIME | $MESSG_NOTIFY_ERROR" >> "$LOGS_DIR/$LOGS_FILENAME"
+        echo "$TODAY_DATE $TODAY_TIME | $MESSG_NOTIFY_ERROR" >> "$PATH_LOG/$LOG_FILENAME"
 
 	;;
 esac
@@ -225,65 +233,73 @@ esac
 if [ $COUNT_NOTIFY_ERROR -eq 0 ]
 then
 
-	if command -v $HDDTEMP > /dev/null
+	if command -v $HDSENSOR > /dev/null
 	then
 
 		for DISK in $HDDS
 		do
 
-			if [ -b $DISK ]
+			if [ "$HDSENSOR" = 'smartctl' ] && [ -b "$DISK" ]
 			then
 
-				# eseguo il comando hddtemp per rilevare la temperatura
-				#HDTEMP=$($HDT $DISK | awk '{ print $3}' | awk -F '°' '{ print $1}')
-				HDTEMP=$($HDT $DISK | cut -d':' -f3 | tr -d '[A-Za-z°]' | tr -d '[:space:]')
+				# eseguo il comando smartctl per rilevare la temperatura. per eseguirlo senza sudo modificare visudo
+				HD_TEMP=$(sudo $HDT -A $DISK | grep -i Temperature_Celsius | awk '{print $10}')
+			fi
 
-				# se la temperatura dell'hd è un numero intero ed è uguale o superiore al limite
-				if [[ $HDTEMP =~ ^[-+]?[0-9]+$ ]] && [ $HDTEMP -ge $TEMPERATURE_LIMIT ]
+			if [ "$HDSENSOR" = "nvme" ] && $HDT list | grep -q "^$DISK"
+			then
+
+				# eseguo il comando nvme per rilevare la temperatura. per eseguirlo senza sudo modificare visudo
+				HD_TEMP=$(sudo $HDT smart-log $DISK | grep -i -m 1 '^temperature[[:space:]]' | cut -d':' -f2 | tr -d '[A-Za-z°]' | cut -d'(' -f1 | tr -d [:space:])
+			fi
+
+			if [ "$HDSENSOR" = 'hddtemp' ] && [ -b "$DISK" ]
+			then
+
+				# eseguo il comando hddtemp per rilevare la temperatura. va eseguito senza password quindi sudo dpkg-reconfigure hddtemp
+				HD_TEMP=$($HDT $DISK | cut -d':' -f3 | tr -d '[A-Za-z°]' | tr -d '[:space:]')
+			fi
+
+			# se la temperatura dell'hd è un numero intero ed è uguale o superiore al limite
+			if [[ $HD_TEMP =~ ^[-+]?[0-9]+$ ]] && [ $HD_TEMP -ge $HD_TEMP_LIMIT ]
+			then
+
+				# aumento il contatore per scrivere un solo incremento per ogni ciclo
+				(( COUNT_TODAY_ALERT++ ))
+
+				# messaggio aggiuntivo in caso di auto shutdown
+				if [ "$SERVER_SDOWN" = 'y' ]
 				then
 
-					# aumento il contatore per scrivere un solo incremento per ogni ciclo
-					(( COUNT_TODAY_ALERT++ ))
-
-					# messaggio aggiuntivo in caso di auto shutdown
-					if [ "$SERVER_SDOWN" = 'y' ]
-					then
-
-						MSG_SDOWN_PLUS="Il sistema verrà spento dopo $SERVER_SDOWN_LOOP avvisi"
-					fi
-
-					EMAIL_SUB="Avviso temperatura $DISK su $HOSTNAME"
-					EMAIL_MSG="Attenzione! Alle $TODAY_TIME è stata rilevata una temperatura di $HDTEMP° sul $DISK. $MSG_SDOWN_PLUS"
-					Z_MSG="ATTENZIONE!\n\nLa temperatura di $DISK è di $HDTEMP°\n$MSG_SDOWN_PLUS"
-
-					case "$NOTIFY_TYPE" in
-
-						1)
-							#echo "message:$Z_MSG" | zenity --notification --listen --window-icon="error"
-							#zenity --warning --title="$Z_MSG_TITLE" --timeout=$Z_MSG_TIMEOUT --width=$Z_MSG_WIDTH--height=$Z_MSG_HEIGHT --text="$Z_MSG" --no-wrap
-							notify-send --icon=error -t $(( $Z_MSG_TIMEOUT*1000 )) "$Z_MSG_TITLE" "\n$Z_MSG"
-
-
-						;;
-
-						2)
-							send_mail "$EMAIL_SERVICE" "$EMAIL_RECIVER" "$EMAIL_SUB" "$EMAIL_MSG"
-						;;
-
-						3)
-							#echo "message:$Z_MSG" | zenity --notification --listen --window-icon="error"
-							#zenity --warning --title="$Z_MSG_TITLE" --timeout=$Z_MSG_TIMEOUT --width=$Z_MSG_WIDTH--height=$Z_MSG_HEIGHT --text="$Z_MSG" --no-wrap
-							notify-send --icon=error -t $(( $Z_MSG_TIMEOUT*1000 )) "$Z_MSG_TITLE" "\n$Z_MSG"
-
-							send_mail "$EMAIL_SERVICE" "$EMAIL_RECIVER" "$EMAIL_SUB" "$EMAIL_MSG"
-						;;
-
-					esac
-
-					echo "$TODAY_DATE | $TODAY_TIME | $DISK: la temperatura rilevata è di $HDTEMP°" >> "$LOGS_DIR/$LOGS_FILENAME"
-					echo "Attenzione! La temperatura di $DISK è di $HDTEMP°"
-
+					MSG_SDOWN_PLUS="Il sistema verrà spento dopo $SERVER_SDOWN_LOOP avvisi"
 				fi
+
+				EMAIL_SUB="Avviso temperatura $DISK su $HOSTNAME"
+				EMAIL_MSG="Attenzione! Alle $TODAY_TIME è stata rilevata una temperatura di $HD_TEMP° sul $DISK. $MSG_SDOWN_PLUS"
+				Z_MSG="ATTENZIONE!\n\nLa temperatura di $DISK è di $HD_TEMP°\n$MSG_SDOWN_PLUS"
+
+				case "$NOTIFY_TYPE" in
+
+					1)
+						notify-send --icon="$PATH_IMG/warning.png" -t $(( $DIALOG_TIMEOUT*1000 )) "$DIALOG_TITLE" "\n$Z_MSG"
+
+					;;
+
+					2)
+						send_mail "$EMAIL_SERVICE" "$EMAIL_RECIVER" "$EMAIL_SUB" "$EMAIL_MSG"
+					;;
+
+					3)
+						notify-send --icon="$PATH_IMG/warning.png" -t $(( $DIALOG_TIMEOUT*1000 )) "$DIALOG_TITLE" "\n$Z_MSG"
+
+						send_mail "$EMAIL_SERVICE" "$EMAIL_RECIVER" "$EMAIL_SUB" "$EMAIL_MSG"
+					;;
+
+				esac
+
+				echo "$TODAY_DATE | $TODAY_TIME | $DISK: la temperatura rilevata è di $HD_TEMP°" >> "$PATH_LOG/$LOG_FILENAME"
+				echo "Attenzione! La temperatura di $DISK è di $HD_TEMP°"
+
 			fi
 
 		done
@@ -296,11 +312,11 @@ then
 		then
 
 			# se esiste già il contatore di oggi lo incremento altrimenti lo scrivo per la prima volta
-			if grep -qa "$TODAY_DATE | count |" "$LOGS_DIR/$LOGS_FILENAME"
+			if grep -qa "$TODAY_DATE | count |" "$PATH_LOG/$LOG_FILENAME"
 			then
 
 				# sostituzione di lettere per lasciare solo numeri: tr -d '[a-z]'
-				NALERT=$( grep "$TODAY_DATE | count |" "$LOGS_DIR/$LOGS_FILENAME" | tail -1 | cut -d'|' -f3 )
+				NALERT=$( grep "$TODAY_DATE | count |" "$PATH_LOG/$LOG_FILENAME" | tail -1 | cut -d'|' -f3 )
 
 				(( NALERT++ ))
 
@@ -309,15 +325,15 @@ then
 				NALERT=1
 			fi
 
-			echo "$TODAY_DATE | count | $NALERT" >> "$LOGS_DIR/$LOGS_FILENAME"
+			echo "$TODAY_DATE | count | $NALERT" >> "$PATH_LOG/$LOG_FILENAME"
 
 			# spegnere il server automaticamente
 			if [ "$SERVER_SDOWN" = 'y' ] && [ $NALERT -ge $SERVER_SDOWN_LOOP ]
 			then
 
-				echo "$TODAY_DATE | $TODAY_TIME | shutdown del sistema" >> "$LOGS_DIR/$LOGS_FILENAME"
+				echo "$TODAY_DATE | $TODAY_TIME | shutdown del sistema" >> "$PATH_LOG/$LOG_FILENAME"
 				# azzero il contatore
-				echo "$TODAY_DATE | count | 0" >> "$LOGS_DIR/$LOGS_FILENAME"
+				echo "$TODAY_DATE | count | 0" >> "$PATH_LOG/$LOG_FILENAME"
 
 				sleep 5
 
@@ -328,8 +344,8 @@ then
 
 	else
 
-		echo "\"$HDDTEMP\": programma non installato sul sistema. prova con \"sudo apt-get install $HDDTEMP\""
-		echo "$TODAY_DATE | $TODAY_TIME | \"$HDDTEMP\": programma non installato sul sistema" >> "$LOGS_DIR/$LOGS_FILENAME"
+		echo "\"$HDSENSOR\": programma non installato sul sistema. prova con \"sudo apt-get install $HDSENSOR\""
+		echo "$TODAY_DATE | $TODAY_TIME | \"$HDSENSOR\": programma non installato sul sistema" >> "$PATH_LOG/$LOG_FILENAME"
 
 	fi
 
