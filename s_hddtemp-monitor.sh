@@ -75,7 +75,7 @@ EMAIL_SERVICE='msmtp'
 
 # email recipient
 # destinatario email
-EMAIL_RECIVER='lorenzo.forti@gmail.com'
+EMAIL_RECIVER='lorenzo@email.net'
 
 # service used for hdd temp. can be hddtemp, smartctl or nvme
 # programma per il rilevamento della temperatura. può essere hddtemp, smartctl oppure nvme (se sono presenti solo ssd)
